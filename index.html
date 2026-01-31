@@ -79,10 +79,14 @@
   </div>
 
   <div class="card">
-    <h2>API key (voor zoeken & koersen)</h2>
+    <h2>API keys</h2>
     <label>
-      Finnhub API key
+      Finnhub API key (voor zoeken)
       <input type="text" id="finnhubKey" placeholder="Finnhub API key" />
+    </label>
+    <label>
+      EODHD API key (voor koersen)
+      <input type="text" id="eodhdKey" placeholder="EODHD API key" />
     </label>
     <button id="refreshPrices">Koersen verversen</button>
   </div>
@@ -99,6 +103,7 @@ const buyPriceInput = document.getElementById("buyPrice");
 const portfolioBody = document.getElementById("portfolioBody");
 const totalsLine = document.getElementById("totalsLine");
 const finnhubKeyInput = document.getElementById("finnhubKey");
+const eodhdKeyInput = document.getElementById("eodhdKey");
 
 tickerInput.addEventListener("input", () => {
   tickerInput.value = tickerInput.value.toUpperCase();
@@ -130,16 +135,16 @@ function getFxRate(currency, rates) {
   return 1 / rates[currency];
 }
 
-async function fetchPriceFinnhub(ticker, apiKey) {
-  const url = `https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${apiKey}`;
+async function fetchPriceEODHD(ticker, apiKey) {
+  const url = `https://eodhd.com/api/real-time/${ticker}?api_token=${apiKey}&fmt=json`;
   const r = await fetch(url);
   const d = await r.json();
 
-  if (!d || !d.c) {
+  if (!d || !d.close) {
     throw new Error("Geen koersdata");
   }
 
-  return Number(d.c);
+  return Number(d.close);
 }
 
 async function searchFinnhub(query, apiKey) {
@@ -246,14 +251,17 @@ function render() {
 function save() {
   localStorage.setItem("pf", JSON.stringify(positions));
   localStorage.setItem("finnhubKey", finnhubKeyInput.value);
+  localStorage.setItem("eodhdKey", eodhdKeyInput.value);
 }
 
 async function refreshAllPrices() {
-  const apiKey = finnhubKeyInput.value.trim();
-  fxRatesCache = await fetchFxRates(apiKey);
+  const finnhubKey = finnhubKeyInput.value.trim();
+  const eodhdKey = eodhdKeyInput.value.trim();
+
+  fxRatesCache = await fetchFxRates(finnhubKey);
 
   for (const pos of positions) {
-    pos.currentPrice = await fetchPriceFinnhub(pos.ticker, apiKey);
+    pos.currentPrice = await fetchPriceEODHD(pos.ticker, eodhdKey);
     pos.fxRate = getFxRate(pos.currency, fxRatesCache);
   }
 
@@ -263,6 +271,7 @@ async function refreshAllPrices() {
 async function load() {
   positions = JSON.parse(localStorage.getItem("pf") || "[]");
   finnhubKeyInput.value = localStorage.getItem("finnhubKey") || "";
+  eodhdKeyInput.value = localStorage.getItem("eodhdKey") || "";
 
   if (positions.length > 0) {
     await refreshAllPrices();
@@ -272,7 +281,8 @@ async function load() {
 }
 
 document.getElementById("addPosition").onclick = async () => {
-  const apiKey = finnhubKeyInput.value.trim();
+  const finnhubKey = finnhubKeyInput.value.trim();
+  const eodhdKey = eodhdKeyInput.value.trim();
   const ticker = tickerInput.value.trim().toUpperCase();
   const shares = Number(sharesInput.value);
   const buyPrice = Number(buyPriceInput.value);
@@ -287,8 +297,8 @@ document.getElementById("addPosition").onclick = async () => {
   const currency = getCurrencyForTicker(ticker);
 
   try {
-    price = await fetchPriceFinnhub(ticker, apiKey);
-    if (!fxRatesCache) fxRatesCache = await fetchFxRates(apiKey);
+    price = await fetchPriceEODHD(ticker, eodhdKey);
+    if (!fxRatesCache) fxRatesCache = await fetchFxRates(finnhubKey);
     fxRate = getFxRate(currency, fxRatesCache);
   } catch (e) {
     alert("Kon koers niet ophalen: " + e.message);
