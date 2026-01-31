@@ -117,12 +117,12 @@
   </div>
 
 <script>
-1// ------------------------------
-// MULTI-PORTFOLIO STORAGE
-// ------------------------------
+/* ============================================================
+   MULTI-PORTFOLIO + PERMANENTE API KEYS
+   ============================================================ */
 
 let currentPortfolio = "";
-let portfolios = []; // lijst met portfolio-namen
+let portfolios = [];
 let positions = [];
 let fxRatesCache = null;
 
@@ -131,7 +131,43 @@ const newPortfolioName = document.getElementById("newPortfolioName");
 const addPortfolioBtn = document.getElementById("addPortfolio");
 const deletePortfolioBtn = document.getElementById("deletePortfolio");
 
-// Laad portfolio-lijst
+const searchInput = document.getElementById("searchInput");
+const searchResults = document.getElementById("searchResults");
+
+const tickerInput = document.getElementById("ticker");
+const sharesInput = document.getElementById("shares");
+const buyPriceInput = document.getElementById("buyPrice");
+
+const portfolioBody = document.getElementById("portfolioBody");
+const totalsLine = document.getElementById("totalsLine");
+
+const finnhubKeyInput = document.getElementById("finnhubKey");
+const eodhdKeyInput = document.getElementById("eodhdKey");
+
+/* ============================================================
+   API KEY LOADING (FIXED)
+   ============================================================ */
+
+function loadKeys() {
+  const fk = localStorage.getItem("finnhubKey");
+  const ek = localStorage.getItem("eodhdKey");
+
+  if (fk && fk !== "") finnhubKeyInput.value = fk;
+  if (ek && ek !== "") eodhdKeyInput.value = ek;
+}
+
+function saveKeys() {
+  const fk = finnhubKeyInput.value.trim();
+  const ek = eodhdKeyInput.value.trim();
+
+  if (fk !== "") localStorage.setItem("finnhubKey", fk);
+  if (ek !== "") localStorage.setItem("eodhdKey", ek);
+}
+
+/* ============================================================
+   PORTFOLIO LIST
+   ============================================================ */
+
 function loadPortfolioList() {
   portfolios = JSON.parse(localStorage.getItem("portfolioList") || "[]");
 
@@ -152,35 +188,14 @@ function loadPortfolioList() {
   portfolioSelect.value = currentPortfolio;
 }
 
-// Sla portfolio-lijst op
 function savePortfolioList() {
   localStorage.setItem("portfolioList", JSON.stringify(portfolios));
   localStorage.setItem("currentPortfolio", currentPortfolio);
 }
 
-// ------------------------------
-// API KEY STORAGE (permanent)
-// ------------------------------
-
-function saveKeys() {
-  const fk = finnhubKeyInput.value.trim();
-  const ek = eodhdKeyInput.value.trim();
-
-  if (fk) localStorage.setItem("finnhubKey", fk);
-  if (ek) localStorage.setItem("eodhdKey", ek);
-}
-
-function loadKeys() {
-  const fk = localStorage.getItem("finnhubKey");
-  const ek = localStorage.getItem("eodhdKey");
-
-  if (fk) finnhubKeyInput.value = fk;
-  if (ek) eodhdKeyInput.value = ek;
-}
-
-// ------------------------------
-// PORTFOLIO STORAGE
-// ------------------------------
+/* ============================================================
+   PORTFOLIO STORAGE
+   ============================================================ */
 
 function pfKey() {
   return "pf_" + currentPortfolio;
@@ -195,9 +210,9 @@ function savePortfolio() {
   saveKeys();
 }
 
-// ------------------------------
-// SEARCH + FX + PRICE FUNCTIONS
-// ------------------------------
+/* ============================================================
+   SEARCH + FX + PRICE
+   ============================================================ */
 
 function getCurrencyForTicker(t) {
   t = t.toUpperCase();
@@ -241,9 +256,9 @@ async function searchFinnhub(query, apiKey) {
   return d.result || [];
 }
 
-// ------------------------------
-// SEARCH UI (contains)
-// ------------------------------
+/* ============================================================
+   SEARCH UI (CONTAINS)
+   ============================================================ */
 
 searchInput.addEventListener("input", async () => {
   const q = searchInput.value.trim();
@@ -297,9 +312,9 @@ searchInput.addEventListener("input", async () => {
   }
 });
 
-// ------------------------------
-// RENDER PORTFOLIO
-// ------------------------------
+/* ============================================================
+   RENDER PORTFOLIO
+   ============================================================ */
 
 function render() {
   portfolioBody.innerHTML = "";
@@ -351,9 +366,9 @@ function render() {
   });
 }
 
-// ------------------------------
-// PRICE REFRESH
-// ------------------------------
+/* ============================================================
+   PRICE REFRESH
+   ============================================================ */
 
 async function refreshAllPrices() {
   const finnhubKey = finnhubKeyInput.value.trim();
@@ -369,9 +384,9 @@ async function refreshAllPrices() {
   savePortfolio();
 }
 
-// ------------------------------
-// PORTFOLIO SWITCHING
-// ------------------------------
+/* ============================================================
+   PORTFOLIO SWITCHING
+   ============================================================ */
 
 portfolioSelect.addEventListener("change", async () => {
   currentPortfolio = portfolioSelect.value;
@@ -381,9 +396,9 @@ portfolioSelect.addEventListener("change", async () => {
   render();
 });
 
-// ------------------------------
-// ADD / DELETE PORTFOLIOS
-// ------------------------------
+/* ============================================================
+   ADD / DELETE PORTFOLIOS
+   ============================================================ */
 
 addPortfolioBtn.onclick = () => {
   const name = newPortfolioName.value.trim();
@@ -410,9 +425,9 @@ deletePortfolioBtn.onclick = () => {
   render();
 };
 
-// ------------------------------
-// ADD POSITION
-// ------------------------------
+/* ============================================================
+   ADD POSITION
+   ============================================================ */
 
 document.getElementById("addPosition").onclick = async () => {
   const finnhubKey = finnhubKeyInput.value.trim();
@@ -432,52 +447,4 @@ document.getElementById("addPosition").onclick = async () => {
 
   try {
     price = await fetchPriceEODHD(ticker, eodhdKey);
-    if (!fxRatesCache) fxRatesCache = await fetchFxRates(finnhubKey);
-    fxRate = getFxRate(currency, fxRatesCache);
-  } catch (e) {
-    alert("Kon koers niet ophalen: " + e.message);
-  }
-
-  positions.push({ ticker, shares, buyPrice, currentPrice: price, currency, fxRate });
-
-  tickerInput.value = "";
-  sharesInput.value = "";
-  buyPriceInput.value = "";
-
-  savePortfolio();
-  render();
-};
-
-// ------------------------------
-// CLEAR POSITIONS
-// ------------------------------
-
-document.getElementById("clearAll").onclick = () => {
-  if (confirm("Alle posities wissen?")) {
-    positions = [];
-    savePortfolio();
-    render();
-  }
-};
-
-// ------------------------------
-// REFRESH BUTTON
-// ------------------------------
-
-document.getElementById("refreshPrices").onclick = async () => {
-  await refreshAllPrices();
-  render();
-};
-
-// ------------------------------
-// INITIAL LOAD
-// ------------------------------
-
-loadPortfolioList();
-loadKeys();
-loadPortfolio();
-refreshAllPrices().then(render);
-
-</script>
-</body>
-</html>
+    if (!fxRatesCache) fxRatesCache = await
