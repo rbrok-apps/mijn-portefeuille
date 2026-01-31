@@ -169,7 +169,21 @@ searchInput.addEventListener("input", async () => {
   }
 
   try {
-    const results = await searchFinnhub(q, apiKey);
+    const raw = await searchFinnhub(q, apiKey);
+
+    // CONTAINS-filter
+    const results = raw.filter(item => {
+      const symbol = (item.symbol || "").toLowerCase();
+      const display = (item.displaySymbol || "").toLowerCase();
+      const desc = (item.description || "").toLowerCase();
+      const query = q.toLowerCase();
+
+      return (
+        symbol.includes(query) ||
+        display.includes(query) ||
+        desc.includes(query)
+      );
+    });
 
     if (!results.length) {
       searchResults.innerHTML = "<div class='search-item'>Geen resultaten gevonden</div>";
