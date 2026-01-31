@@ -171,7 +171,6 @@ searchInput.addEventListener("input", async () => {
   try {
     const raw = await searchFinnhub(q, apiKey);
 
-    // CONTAINS-filter
     const results = raw.filter(item => {
       const symbol = (item.symbol || "").toLowerCase();
       const display = (item.displaySymbol || "").toLowerCase();
@@ -263,9 +262,18 @@ function render() {
 }
 
 function save() {
+  const finnhubKey = finnhubKeyInput.value.trim();
+  const eodhdKey = eodhdKeyInput.value.trim();
+
+  if (finnhubKey) {
+    localStorage.setItem("finnhubKey", finnhubKey);
+  }
+
+  if (eodhdKey) {
+    localStorage.setItem("eodhdKey", eodhdKey);
+  }
+
   localStorage.setItem("pf", JSON.stringify(positions));
-  localStorage.setItem("finnhubKey", finnhubKeyInput.value);
-  localStorage.setItem("eodhdKey", eodhdKeyInput.value);
 }
 
 async function refreshAllPrices() {
@@ -284,8 +292,12 @@ async function refreshAllPrices() {
 
 async function load() {
   positions = JSON.parse(localStorage.getItem("pf") || "[]");
-  finnhubKeyInput.value = localStorage.getItem("finnhubKey") || "";
-  eodhdKeyInput.value = localStorage.getItem("eodhdKey") || "";
+
+  const savedFinnhub = localStorage.getItem("finnhubKey");
+  const savedEodhd = localStorage.getItem("eodhdKey");
+
+  if (savedFinnhub) finnhubKeyInput.value = savedFinnhub;
+  if (savedEodhd) eodhdKeyInput.value = savedEodhd;
 
   if (positions.length > 0) {
     await refreshAllPrices();
