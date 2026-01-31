@@ -11,7 +11,7 @@
     h1 { font-size: 1.4rem; }
     .card { background:white; padding:12px; margin-bottom:12px; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.08); }
     label { display:block; font-size:0.85rem; margin-top:6px; }
-    input { width:100%; padding:6px 8px; margin-top:2px; border-radius:4px; border:1px solid #ccc; font-size:0.9rem; box-sizing:border-box; }
+    input, select { width:100%; padding:6px 8px; margin-top:2px; border-radius:4px; border:1px solid #ccc; font-size:0.9rem; box-sizing:border-box; }
     button { margin-top:10px; padding:8px 12px; border:none; border-radius:6px; background:#007aff; color:white; font-size:0.9rem; cursor:pointer; }
     button.secondary { background:#eee; color:#333; margin-left:6px; }
     table { width:100%; border-collapse:collapse; margin-top:8px; font-size:0.8rem; }
@@ -24,10 +24,35 @@
     .search-results { background:white; border:1px solid #ccc; border-radius:6px; margin-top:4px; max-height:200px; overflow-y:auto; }
     .search-item { padding:8px; border-bottom:1px solid #eee; cursor:pointer; }
     .search-item:hover { background:#f0f0f0; }
+    .row { display:flex; gap:8px; }
+    .row > div { flex:1; }
   </style>
 </head>
 <body>
   <h1>Mijn Aandelen & ETF portefeuille</h1>
+
+  <div class="card">
+    <h2>Portfolio kiezen</h2>
+
+    <label>
+      Geselecteerde portefeuille
+      <select id="portfolioSelect"></select>
+    </label>
+
+    <div class="row">
+      <div>
+        <label>
+          Nieuwe portefeuille naam
+          <input type="text" id="newPortfolioName" placeholder="Bijv. Pensioen, Kinderen, Crypto" />
+        </label>
+      </div>
+      <div>
+        <button id="addPortfolio">Toevoegen</button>
+      </div>
+    </div>
+
+    <button class="secondary" id="deletePortfolio">Geselecteerde portefeuille verwijderen</button>
+  </div>
 
   <div class="card">
     <h2>Aandeel / ETF zoeken</h2>
@@ -54,7 +79,7 @@
     </label>
 
     <button id="addPosition">Toevoegen</button>
-    <button class="secondary" id="clearAll">Alles wissen</button>
+    <button class="secondary" id="clearAll">Alle posities wissen</button>
   </div>
 
   <div class="card">
@@ -92,22 +117,87 @@
   </div>
 
 <script>
+1// ------------------------------
+// MULTI-PORTFOLIO STORAGE
+// ------------------------------
+
+let currentPortfolio = "";
+let portfolios = []; // lijst met portfolio-namen
 let positions = [];
 let fxRatesCache = null;
 
-const searchInput = document.getElementById("searchInput");
-const searchResults = document.getElementById("searchResults");
-const tickerInput = document.getElementById("ticker");
-const sharesInput = document.getElementById("shares");
-const buyPriceInput = document.getElementById("buyPrice");
-const portfolioBody = document.getElementById("portfolioBody");
-const totalsLine = document.getElementById("totalsLine");
-const finnhubKeyInput = document.getElementById("finnhubKey");
-const eodhdKeyInput = document.getElementById("eodhdKey");
+const portfolioSelect = document.getElementById("portfolioSelect");
+const newPortfolioName = document.getElementById("newPortfolioName");
+const addPortfolioBtn = document.getElementById("addPortfolio");
+const deletePortfolioBtn = document.getElementById("deletePortfolio");
 
-tickerInput.addEventListener("input", () => {
-  tickerInput.value = tickerInput.value.toUpperCase();
-});
+// Laad portfolio-lijst
+function loadPortfolioList() {
+  portfolios = JSON.parse(localStorage.getItem("portfolioList") || "[]");
+
+  if (portfolios.length === 0) {
+    portfolios = ["Hoofdportefeuille"];
+    localStorage.setItem("portfolioList", JSON.stringify(portfolios));
+  }
+
+  portfolioSelect.innerHTML = "";
+  portfolios.forEach(name => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    portfolioSelect.appendChild(opt);
+  });
+
+  currentPortfolio = localStorage.getItem("currentPortfolio") || portfolios[0];
+  portfolioSelect.value = currentPortfolio;
+}
+
+// Sla portfolio-lijst op
+function savePortfolioList() {
+  localStorage.setItem("portfolioList", JSON.stringify(portfolios));
+  localStorage.setItem("currentPortfolio", currentPortfolio);
+}
+
+// ------------------------------
+// API KEY STORAGE (permanent)
+// ------------------------------
+
+function saveKeys() {
+  const fk = finnhubKeyInput.value.trim();
+  const ek = eodhdKeyInput.value.trim();
+
+  if (fk) localStorage.setItem("finnhubKey", fk);
+  if (ek) localStorage.setItem("eodhdKey", ek);
+}
+
+function loadKeys() {
+  const fk = localStorage.getItem("finnhubKey");
+  const ek = localStorage.getItem("eodhdKey");
+
+  if (fk) finnhubKeyInput.value = fk;
+  if (ek) eodhdKeyInput.value = ek;
+}
+
+// ------------------------------
+// PORTFOLIO STORAGE
+// ------------------------------
+
+function pfKey() {
+  return "pf_" + currentPortfolio;
+}
+
+function loadPortfolio() {
+  positions = JSON.parse(localStorage.getItem(pfKey()) || "[]");
+}
+
+function savePortfolio() {
+  localStorage.setItem(pfKey(), JSON.stringify(positions));
+  saveKeys();
+}
+
+// ------------------------------
+// SEARCH + FX + PRICE FUNCTIONS
+// ------------------------------
 
 function getCurrencyForTicker(t) {
   t = t.toUpperCase();
@@ -140,10 +230,7 @@ async function fetchPriceEODHD(ticker, apiKey) {
   const r = await fetch(url);
   const d = await r.json();
 
-  if (!d || !d.close) {
-    throw new Error("Geen koersdata");
-  }
-
+  if (!d || !d.close) throw new Error("Geen koersdata");
   return Number(d.close);
 }
 
@@ -153,6 +240,10 @@ async function searchFinnhub(query, apiKey) {
   const d = await r.json();
   return d.result || [];
 }
+
+// ------------------------------
+// SEARCH UI (contains)
+// ------------------------------
 
 searchInput.addEventListener("input", async () => {
   const q = searchInput.value.trim();
@@ -176,12 +267,7 @@ searchInput.addEventListener("input", async () => {
       const display = (item.displaySymbol || "").toLowerCase();
       const desc = (item.description || "").toLowerCase();
       const query = q.toLowerCase();
-
-      return (
-        symbol.includes(query) ||
-        display.includes(query) ||
-        desc.includes(query)
-      );
+      return symbol.includes(query) || display.includes(query) || desc.includes(query);
     });
 
     if (!results.length) {
@@ -210,6 +296,10 @@ searchInput.addEventListener("input", async () => {
     searchResults.style.display = "block";
   }
 });
+
+// ------------------------------
+// RENDER PORTFOLIO
+// ------------------------------
 
 function render() {
   portfolioBody.innerHTML = "";
@@ -254,27 +344,16 @@ function render() {
   document.querySelectorAll("button[data-i]").forEach(btn => {
     btn.onclick = async () => {
       positions.splice(btn.dataset.i, 1);
-      save();
+      savePortfolio();
       await refreshAllPrices();
       render();
     };
   });
 }
 
-function save() {
-  const finnhubKey = finnhubKeyInput.value.trim();
-  const eodhdKey = eodhdKeyInput.value.trim();
-
-  if (finnhubKey) {
-    localStorage.setItem("finnhubKey", finnhubKey);
-  }
-
-  if (eodhdKey) {
-    localStorage.setItem("eodhdKey", eodhdKey);
-  }
-
-  localStorage.setItem("pf", JSON.stringify(positions));
-}
+// ------------------------------
+// PRICE REFRESH
+// ------------------------------
 
 async function refreshAllPrices() {
   const finnhubKey = finnhubKeyInput.value.trim();
@@ -287,24 +366,53 @@ async function refreshAllPrices() {
     pos.fxRate = getFxRate(pos.currency, fxRatesCache);
   }
 
-  save();
+  savePortfolio();
 }
 
-async function load() {
-  positions = JSON.parse(localStorage.getItem("pf") || "[]");
+// ------------------------------
+// PORTFOLIO SWITCHING
+// ------------------------------
 
-  const savedFinnhub = localStorage.getItem("finnhubKey");
-  const savedEodhd = localStorage.getItem("eodhdKey");
-
-  if (savedFinnhub) finnhubKeyInput.value = savedFinnhub;
-  if (savedEodhd) eodhdKeyInput.value = savedEodhd;
-
-  if (positions.length > 0) {
-    await refreshAllPrices();
-  }
-
+portfolioSelect.addEventListener("change", async () => {
+  currentPortfolio = portfolioSelect.value;
+  savePortfolioList();
+  loadPortfolio();
+  await refreshAllPrices();
   render();
-}
+});
+
+// ------------------------------
+// ADD / DELETE PORTFOLIOS
+// ------------------------------
+
+addPortfolioBtn.onclick = () => {
+  const name = newPortfolioName.value.trim();
+  if (!name) return alert("Voer een naam in.");
+
+  if (portfolios.includes(name)) return alert("Deze naam bestaat al.");
+
+  portfolios.push(name);
+  savePortfolioList();
+  loadPortfolioList();
+  newPortfolioName.value = "";
+  loadPortfolio();
+  render();
+};
+
+deletePortfolioBtn.onclick = () => {
+  if (!confirm("Weet je zeker dat je deze portefeuille wilt verwijderen?")) return;
+
+  portfolios = portfolios.filter(p => p !== currentPortfolio);
+  localStorage.removeItem(pfKey());
+  savePortfolioList();
+  loadPortfolioList();
+  loadPortfolio();
+  render();
+};
+
+// ------------------------------
+// ADD POSITION
+// ------------------------------
 
 document.getElementById("addPosition").onclick = async () => {
   const finnhubKey = finnhubKeyInput.value.trim();
@@ -336,25 +444,40 @@ document.getElementById("addPosition").onclick = async () => {
   sharesInput.value = "";
   buyPriceInput.value = "";
 
-  save();
+  savePortfolio();
   render();
 };
+
+// ------------------------------
+// CLEAR POSITIONS
+// ------------------------------
+
+document.getElementById("clearAll").onclick = () => {
+  if (confirm("Alle posities wissen?")) {
+    positions = [];
+    savePortfolio();
+    render();
+  }
+};
+
+// ------------------------------
+// REFRESH BUTTON
+// ------------------------------
 
 document.getElementById("refreshPrices").onclick = async () => {
   await refreshAllPrices();
   render();
 };
 
-document.getElementById("clearAll").onclick = () => {
-  if (confirm("Alles wissen?")) {
-    positions = [];
-    save();
-    render();
-  }
-};
+// ------------------------------
+// INITIAL LOAD
+// ------------------------------
 
-load();
+loadPortfolioList();
+loadKeys();
+loadPortfolio();
+refreshAllPrices().then(render);
+
 </script>
-
 </body>
 </html>
